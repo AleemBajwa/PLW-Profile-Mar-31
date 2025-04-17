@@ -24,24 +24,36 @@ def load_all_data():
     dfs = []
     for src in sheet_sources:
         try:
+            # Load CSV with dtype as string to avoid mixed types
             url = f"https://docs.google.com/spreadsheets/d/{src['id']}/export?format=csv"
             df = pd.read_csv(url, dtype=str, low_memory=False)
             df['District'] = src['name']
             df['District_Type'] = src['type']
+            
+            # Data preprocessing based on user specifications
+            df['Mother_CNIC_No'] = pd.to_numeric(df['Mother_CNIC_No'], errors='coerce')  # numeric format
+            df['Mother_DOB'] = pd.to_datetime(df['Mother_DOB'], errors='coerce')  # datetime format
+            df['Visit_Date_Time'] = pd.to_datetime(df['Visit_Date_Time'], errors='coerce')  # datetime format
+            df['ACCOUNT OPEN DATE'] = pd.to_datetime(df['ACCOUNT OPEN DATE'], errors='coerce')  # datetime format
+            df['LAST_WITHDRAWAL_DATE'] = pd.to_datetime(df['LAST_WITHDRAWAL_DATE'], errors='coerce')  # datetime format
+            df['LAST_DEPOSIT_DATE'] = pd.to_datetime(df['LAST_DEPOSIT_DATE'], errors='coerce')  # datetime format
+            df['Total Debit'] = pd.to_numeric(df['Total Debit'], errors='coerce').fillna(0)  # float format
+            df['Total Credit'] = pd.to_numeric(df['Total Credit'], errors='coerce').fillna(0)  # float format
+            
+            # Append the data frame
             dfs.append(df)
         except Exception as e:
             st.warning(f"Failed to load {src['name']}: {e}")
+    
+    # Concatenate all data into a single DataFrame
     df = pd.concat(dfs, ignore_index=True)
-    df.rename(columns={'Mother_CNIC_No': 'PLW'}, inplace=True)
-    df['Is_Paid'] = pd.to_numeric(df.get('Is_Paid', 0), errors='coerce').fillna(0).astype(int)
-    df['Total Credit'] = pd.to_numeric(df.get('Total Credit', 0), errors='coerce')
-    df['Visit_Date_Time'] = pd.to_datetime(df.get('Visit_Date_Time'), errors='coerce')
+    
     return df
 
-# Streamlit interface
+# Streamlit UI setup
 st.title("📊 District Dashboard")
 
-# Load data when the user presses the button
+# Add a button to load data, preventing timeout on initial page load
 if st.button("📥 Load Data"):
     with st.spinner("Loading all district data from Google Sheets..."):
         df = load_all_data()
@@ -70,7 +82,7 @@ if st.button("📥 Load Data"):
     if account_status:
         df = df[df['AC STATUS'].isin(account_status)]
 
-    # Charts
+    # Visualizations
     st.subheader("📈 Visits Over Time")
     if 'Visit_Date_Time' in df.columns and not df['Visit_Date_Time'].isna().all():
         visits = df.groupby(df['Visit_Date_Time'].dt.date).size().reset_index(name='Visits')
