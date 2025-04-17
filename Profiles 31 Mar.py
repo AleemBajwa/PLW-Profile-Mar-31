@@ -25,7 +25,7 @@ def load_all_data():
     for src in sheet_sources:
         try:
             url = f"https://docs.google.com/spreadsheets/d/{src['id']}/export?format=csv"
-            df = pd.read_csv(url)
+            df = pd.read_csv(url, dtype=str, low_memory=False)
             df['District'] = src['name']
             df['District_Type'] = src['type']
             dfs.append(df)
@@ -38,57 +38,62 @@ def load_all_data():
     df['Visit_Date_Time'] = pd.to_datetime(df.get('Visit_Date_Time'), errors='coerce')
     return df
 
-# Load data
+# Streamlit interface
 st.title("📊 District Dashboard")
-df = load_all_data()
 
-# KPIs
-st.header("📌 Summary")
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Total PLWs", df['PLW'].nunique())
-col2.metric("Total Visits", len(df))
-col3.metric("Paid Visits", df[df['Is_Paid'] == 1].shape[0])
-col4.metric("Unpaid Visits", df[df['Is_Paid'] == 0].shape[0])
+# Load data when the user presses the button
+if st.button("📥 Load Data"):
+    with st.spinner("Loading all district data from Google Sheets..."):
+        df = load_all_data()
 
-# Sidebar Filters
-st.sidebar.header("🔍 Filters")
-district_type = st.sidebar.multiselect("District Type", df['District_Type'].unique())
-districts = st.sidebar.multiselect("District", df['District'].unique())
-stage_codes = st.sidebar.multiselect("Stage Code", df['Stage_Code'].dropna().unique())
-account_status = st.sidebar.multiselect("Account Status", df['AC STATUS'].dropna().unique())
+    # KPIs
+    st.header("📌 Summary")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total PLWs", df['PLW'].nunique())
+    col2.metric("Total Visits", len(df))
+    col3.metric("Paid Visits", df[df['Is_Paid'] == 1].shape[0])
+    col4.metric("Unpaid Visits", df[df['Is_Paid'] == 0].shape[0])
 
-if district_type:
-    df = df[df['District_Type'].isin(district_type)]
-if districts:
-    df = df[df['District'].isin(districts)]
-if stage_codes:
-    df = df[df['Stage_Code'].isin(stage_codes)]
-if account_status:
-    df = df[df['AC STATUS'].isin(account_status)]
+    # Sidebar Filters
+    st.sidebar.header("🔍 Filters")
+    district_type = st.sidebar.multiselect("District Type", df['District_Type'].unique())
+    districts = st.sidebar.multiselect("District", df['District'].unique())
+    stage_codes = st.sidebar.multiselect("Stage Code", df['Stage_Code'].dropna().unique())
+    account_status = st.sidebar.multiselect("Account Status", df['AC STATUS'].dropna().unique())
 
-# Charts
-st.subheader("📈 Visits Over Time")
-if 'Visit_Date_Time' in df.columns and not df['Visit_Date_Time'].isna().all():
-    visits = df.groupby(df['Visit_Date_Time'].dt.date).size().reset_index(name='Visits')
-    st.plotly_chart(px.line(visits, x='Visit_Date_Time', y='Visits'))
+    if district_type:
+        df = df[df['District_Type'].isin(district_type)]
+    if districts:
+        df = df[df['District'].isin(districts)]
+    if stage_codes:
+        df = df[df['Stage_Code'].isin(stage_codes)]
+    if account_status:
+        df = df[df['AC STATUS'].isin(account_status)]
 
-st.subheader("📊 Account Status")
-status_counts = df['AC STATUS'].value_counts().reset_index()
-status_counts.columns = ['Status', 'Count']
-st.plotly_chart(px.pie(status_counts, names='Status', values='Count'))
+    # Charts
+    st.subheader("📈 Visits Over Time")
+    if 'Visit_Date_Time' in df.columns and not df['Visit_Date_Time'].isna().all():
+        visits = df.groupby(df['Visit_Date_Time'].dt.date).size().reset_index(name='Visits')
+        st.plotly_chart(px.line(visits, x='Visit_Date_Time', y='Visits'))
 
-st.subheader("💰 Top PLWs by Credit")
-top_credit = df.groupby('PLW')['Total Credit'].sum().reset_index().sort_values(by='Total Credit', ascending=False).head(10)
-st.plotly_chart(px.bar(top_credit, x='PLW', y='Total Credit'))
+    st.subheader("📊 Account Status")
+    status_counts = df['AC STATUS'].value_counts().reset_index()
+    status_counts.columns = ['Status', 'Count']
+    st.plotly_chart(px.pie(status_counts, names='Status', values='Count'))
 
-# Data Table
-st.subheader("📋 Data Table")
-st.dataframe(df)
+    st.subheader("💰 Top PLWs by Credit")
+    top_credit = df.groupby('PLW')['Total Credit'].sum().reset_index().sort_values(by='Total Credit', ascending=False).head(10)
+    st.plotly_chart(px.bar(top_credit, x='PLW', y='Total Credit'))
 
-# Download
-@st.cache_data
-def convert_df(df):
-    return df.to_csv(index=False).encode("utf-8")
+    st.subheader("📋 Data Table")
+    st.dataframe(df)
 
-csv = convert_df(df)
-st.download_button("📥 Download Data", csv, "filtered_data.csv", "text/csv")
+    @st.cache_data
+    def convert_df(df):
+        return df.to_csv(index=False).encode("utf-8")
+
+    csv = convert_df(df)
+    st.download_button("📥 Download Data", csv, "filtered_data.csv", "text/csv")
+
+else:
+    st.info("Click the button above to load data from Google Sheets.")
